@@ -89,6 +89,7 @@ export default function HomePage() {
     homePlayer: null,
     awayPlayer: null,
     charge: null,
+    forecast: { home: 33, draw: 33, away: 33, label: 'draw' },
     stats: {
       home: { ...EMPTY_TEAM_STATS },
       away: { ...EMPTY_TEAM_STATS },
@@ -322,6 +323,47 @@ export default function HomePage() {
           </div>
         )}
 
+        {/* Live forecast. */}
+        {phase === 'playing' && mode !== 'practice' && (
+          <div className="absolute top-3 right-3 w-[220px] rounded-xl border border-night-800 bg-night-950/90 p-3 shadow-lg shadow-black/40 backdrop-blur-sm animate-fade-in">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-heading uppercase tracking-[0.25em] text-[10px] text-night-400">
+                Pronóstico
+              </span>
+              <span className="font-body text-[11px] text-night-300">
+                {fmtTime(hud.clock)}
+              </span>
+            </div>
+            <div className="mt-2 space-y-2">
+              {[
+                { label: home.abbr, value: hud.forecast.home, color: home.color },
+                { label: 'EM', value: hud.forecast.draw, color: '#f59e0b' },
+                { label: away.abbr, value: hud.forecast.away, color: away.color },
+              ].map((row) => (
+                <div key={row.label} className="grid grid-cols-[auto_1fr_auto] items-center gap-2">
+                  <span className="font-heading text-[11px] uppercase tracking-[0.2em] text-night-200">
+                    {row.label}
+                  </span>
+                  <div className="h-2 rounded-full bg-night-800 overflow-hidden">
+                    <div
+                      className="h-full rounded-full"
+                      style={{ width: `${Math.max(4, row.value)}%`, backgroundColor: row.color }}
+                    />
+                  </div>
+                  <span className="font-display text-sm tabular-nums text-white">
+                    {row.value}%
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-2 border-t border-night-800 pt-2 text-center text-[11px] text-night-300">
+              {hud.forecast.label === 'home' && `Favorito: ${home.name}`}
+              {hud.forecast.label === 'away' && `Favorito: ${away.name}`}
+              {hud.forecast.label === 'draw' && 'Empate muy vivo'}
+            </div>
+          </div>
+        )}
+
         {/* Broadcast lower-thirds. */}
         {phase === 'playing' && hud.homePlayer && (
           <PlayerNameTag
@@ -416,7 +458,7 @@ export default function HomePage() {
         )}
       </div>
 
-      {phase === 'playing' && mode === 'cpu-vs-cpu' && (
+      {phase === 'playing' && (
         <CpuVsCpuStatsPanel
           home={home}
           away={away}

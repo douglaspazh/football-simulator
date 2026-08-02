@@ -80,6 +80,13 @@ export interface PlayerEntity {
   };
 }
 
+export interface MatchForecast {
+  home: number;
+  draw: number;
+  away: number;
+  label: 'home' | 'draw' | 'away';
+}
+
 export interface HudState {
   homeScore: number;
   awayScore: number;
@@ -92,6 +99,7 @@ export interface HudState {
   awayPlayer: { num: number; name: string } | null;
   /** 0..1 charge of the in-progress home kick, or null when not charging. */
   charge: number | null;
+  forecast: MatchForecast;
   stats: {
     home: TeamHudStats;
     away: TeamHudStats;

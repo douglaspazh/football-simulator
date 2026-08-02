@@ -44,6 +44,6 @@ npm run start
 │   │   │   └── types.ts       # Shared game types
 │   │   └── pages/
 │   │       └── HomePage.tsx   # Canvas host, HUD, menus, team select
-│   └── server/          # Modelence backend modules
+│   └── server/          # Modelence  backend modules
 └── modelence.config.ts
 ```

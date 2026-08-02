@@ -61,7 +61,7 @@ import {
   duelRate,
 } from './ratings';
 import { CAM_MIN, CAM_MAX, CAM_Y_MIN, CAM_Y_MAX } from './projection';
-import type { Vec, Team, PlayerEntity, StateListener } from './types';
+import type { Vec, Team, PlayerEntity, StateListener, MatchForecast } from './types';
 import { renderScene } from './render';
 
 // Re-exports so consumers (e.g. HomePage) can import these from the engine entry.
@@ -94,7 +94,6 @@ export class PitchKickGame {
   private raf = 0;
   private last = 0;
   private running = false;
-  private matchId: string | null = null;
 
   private keys = new Set<string>();
   private justPressed: string[] = [];
@@ -534,12 +533,142 @@ export class PitchKickGame {
     this.messageTimer = secs;
   }
 
+  private buildForecast(): MatchForecast {
+    const minute = Math.max(0, Math.min(90, Math.floor((this.elapsed / MATCH_REAL_SECS) * 90)));
+    const homePos = this.stats.home.possessionSec;
+    const awayPos = this.stats.away.possessionSec;
+    const totalPos = homePos + awayPos;
+    const homePossessionPct = totalPos > 0 ? (homePos * 100) / totalPos : 50;
+    const scoreDiff = this.homeScore - this.awayScore;
+
+    const homeShots = this.stats.home.shots;
+    const awayShots = this.stats.away.shots;
+    const homeShotsOnTarget = this.stats.home.shotsOnTarget;
+    const awayShotsOnTarget = this.stats.away.shotsOnTarget;
+    const homePasses = this.stats.home.passes;
+    const awayPasses = this.stats.away.passes;
+    const homePassAcc = homePasses > 0 ? (this.stats.home.passesCompleted * 100) / homePasses : 50;
+    const awayPassAcc = awayPasses > 0 ? (this.stats.away.passesCompleted * 100) / awayPasses : 50;
+    const homeTackles = this.stats.home.tacklesWon;
+    const awayTackles = this.stats.away.tacklesWon;
+    const homeSaves = this.stats.home.saves;
+    const awaySaves = this.stats.away.saves;
+    const homeCorners = this.stats.home.corners;
+    const awayCorners = this.stats.away.corners;
+    const homeOffsides = this.stats.home.offsides;
+    const awayOffsides = this.stats.away.offsides;
+
+    let homePoints = 0;
+    let drawPoints = 0;
+    let awayPoints = 0;
+
+    const possessionEdge = (homePossessionPct - 50) * 0.8;
+    homePoints += Math.max(0, possessionEdge);
+    awayPoints += Math.max(0, -possessionEdge);
+    drawPoints += Math.max(0, 2 - Math.abs(possessionEdge) * 0.08);
+
+    const shotEdge = (homeShots - awayShots) * 0.3;
+    homePoints += Math.max(0, shotEdge);
+    awayPoints += Math.max(0, -shotEdge);
+    drawPoints += Math.max(0, 1.5 - Math.abs(shotEdge) * 0.08);
+
+    const onTargetEdge = (homeShotsOnTarget - awayShotsOnTarget) * 1.2;
+    homePoints += Math.max(0, onTargetEdge);
+    awayPoints += Math.max(0, -onTargetEdge);
+    drawPoints += Math.max(0, 2 - Math.abs(onTargetEdge) * 0.08);
+
+    const passEdge = (homePasses - awayPasses) * 0.035;
+    homePoints += Math.max(0, passEdge);
+    awayPoints += Math.max(0, -passEdge);
+    drawPoints += Math.max(0, 1 - Math.abs(passEdge) * 0.06);
+
+    const passAccEdge = (homePassAcc - awayPassAcc) * 0.5;
+    homePoints += Math.max(0, passAccEdge);
+    awayPoints += Math.max(0, -passAccEdge);
+    drawPoints += Math.max(0, 1.2 - Math.abs(passAccEdge) * 0.06);
+
+    const tackleEdge = (homeTackles - awayTackles) * 0.7;
+    homePoints += Math.max(0, tackleEdge);
+    awayPoints += Math.max(0, -tackleEdge);
+    drawPoints += Math.max(0, 0.8 - Math.abs(tackleEdge) * 0.05);
+
+    const saveEdge = (homeSaves - awaySaves) * 0.6;
+    homePoints += Math.max(0, saveEdge);
+    awayPoints += Math.max(0, -saveEdge);
+    drawPoints += Math.max(0, 1 - Math.abs(saveEdge) * 0.05);
+
+    const cornerEdge = (homeCorners - awayCorners) * 0.4;
+    homePoints += Math.max(0, cornerEdge);
+    awayPoints += Math.max(0, -cornerEdge);
+    drawPoints += Math.max(0, 0.6 - Math.abs(cornerEdge) * 0.04);
+
+    const offsideEdge = (homeOffsides - awayOffsides) * 0.2;
+    homePoints += Math.max(0, offsideEdge);
+    awayPoints += Math.max(0, -offsideEdge);
+    drawPoints += Math.max(0, 0.5 - Math.abs(offsideEdge) * 0.04);
+
+    if (scoreDiff > 0) {
+      homePoints += 18 + scoreDiff * 8;
+      awayPoints += Math.max(0, 3 - scoreDiff * 2);
+      drawPoints += Math.max(0, 6 - scoreDiff * 2);
+    } else if (scoreDiff < 0) {
+      awayPoints += 18 + Math.abs(scoreDiff) * 8;
+      homePoints += Math.max(0, 3 - Math.abs(scoreDiff) * 2);
+      drawPoints += Math.max(0, 6 - Math.abs(scoreDiff) * 2);
+    } else {
+      drawPoints += 14 + Math.max(0, Math.min(1, minute / 90)) * 8;
+    }
+
+    const lateBias = Math.max(0, (minute - 35) / 55) * 10;
+    if (scoreDiff > 0) homePoints += lateBias;
+    else if (scoreDiff < 0) awayPoints += lateBias;
+    else drawPoints += lateBias * 0.8;
+
+    homePoints = Math.max(homePoints, 0);
+    drawPoints = Math.max(drawPoints, 0);
+    awayPoints = Math.max(awayPoints, 0);
+
+    const total = Math.max(1, homePoints + drawPoints + awayPoints);
+    const homeRaw = homePoints / total;
+    const drawRaw = drawPoints / total;
+    const awayRaw = awayPoints / total;
+
+    let home = Math.round(homeRaw * 100);
+    let draw = Math.round(drawRaw * 100);
+    let away = 100 - home - draw;
+
+    home = Math.max(0, Math.min(100, home));
+    draw = Math.max(0, Math.min(100, draw));
+    away = Math.max(0, Math.min(100, away));
+
+    const sum = home + draw + away;
+    if (sum !== 100) {
+      const diff = 100 - sum;
+      if (diff > 0) {
+        draw += diff;
+      } else {
+        draw = Math.max(0, draw + diff);
+      }
+    }
+
+    home = Math.max(0, Math.min(100, home));
+    draw = Math.max(0, Math.min(100, draw));
+    away = Math.max(0, Math.min(100, away));
+
+    let label: MatchForecast['label'] = 'draw';
+    if (home >= draw && home >= away) label = 'home';
+    else if (away > draw) label = 'away';
+
+    return { home, draw, away, label };
+  }
+
   private emit() {
     const homePos = this.stats.home.possessionSec;
     const awayPos = this.stats.away.possessionSec;
     const totalPos = homePos + awayPos;
     const homePossessionPct = totalPos > 0 ? Math.round((homePos * 100) / totalPos) : 50;
     const awayPossessionPct = totalPos > 0 ? 100 - homePossessionPct : 50;
+    const forecast = this.buildForecast();
     this.listener({
       homeScore: this.homeScore,
       awayScore: this.awayScore,
@@ -556,6 +685,7 @@ export class PitchKickGame {
         ? { num: this.awayActive.num, name: this.awayActive.name }
         : null,
       charge: this.chargeLevel(),
+      forecast,
       stats: {
         home: {
           possessionPct: homePossessionPct,
